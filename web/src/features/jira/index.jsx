@@ -1,7 +1,7 @@
 
 
 // src/features/jira/index.jsx
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ControlledBoard, moveCard , UncontrolledBoard} from "@caldwell619/react-kanban";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchBoard, moveCardLocal, persistCardMove } from "../boardSlice";
@@ -9,6 +9,8 @@ import Header from "./components/Header";
 import Filters from "./components/Filters";
 import renderCard from "./components/Card";
 import renderColumnHeader from "./components/ColumnHeader";
+import { JiraCard } from "./components/Card"; 
+import CardDetailsDialog from "./components/CardDetailsDialog"; 
 import {
   moveCard as moveCardHelper,
 } from "@caldwell619/react-kanban";
@@ -27,6 +29,7 @@ const mapColumnsToBoard = (columns) => ({
  const JiraDemo = () => {
   const dispatch = useDispatch();
   const { columns, loading } = useSelector((s) => s.board);
+  const [selectedCard, setSelectedCard] = useState(null);
   const boardId = "69254d02626029b84a1f93b2";
 
   useEffect(() => {
@@ -58,6 +61,15 @@ const handleCardDragEnd = (card, source, destination) => {
   );
 };
 
+const renderCard = (card) => (
+  <JiraCard
+    {...card}
+    onClick={() => {
+      setSelectedCard(card);
+    }}
+  />
+);
+
   return (
     <>
       <Header />
@@ -76,6 +88,12 @@ const handleCardDragEnd = (card, source, destination) => {
             {safeBoard}
           </ControlledBoard>
         )}
+        
+        <CardDetailsDialog
+          open={!!selectedCard}
+          card={selectedCard}
+          onClose={() => setSelectedCard(null)}
+        />
       </Box>
     </>
   );

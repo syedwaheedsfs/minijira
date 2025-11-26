@@ -8,7 +8,22 @@ const CardSchema = new mongoose.Schema(
 
     assigneeId: { type: String, required: true },
     reporterId: { type: String, required: true },
-    storyPoints: { type: Number, default: 0 },
+    actualTimeToComplete: {
+      type: Number, // e.g. 2.5 = 2.5 hours
+      default: 0,
+    },
+
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high", "urgent"],
+      default: "medium",
+      required: true,
+    },
+
+    labels: {
+      type: [String], 
+      default: [],
+    },
 
     ticketType: {
       type: String,

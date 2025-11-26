@@ -21,7 +21,6 @@ import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import CreateCardDialog from "./CreateCardDialog";
-
 import { useDispatch, useSelector } from "react-redux";
 import { fetchBoard } from "../../boardSlice";
 

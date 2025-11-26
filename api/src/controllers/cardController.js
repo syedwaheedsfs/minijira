@@ -10,13 +10,16 @@ export const createCard = async (req, res) => {
       description,
       assigneeId,
       reporterId,
-      storyPoints,
+      actualTimeToComplete,
+      priority,
+      labels,
       ticketType,
     } = req.body;
 
     // Get next position in column
     const count = await Card.countDocuments({ columnId });
   const normalizedTicketType = ticketType.toLowerCase();
+   const normalizedPriority = (priority || "medium").toLowerCase();
     const card = await Card.create({
       boardId,
       columnId,
@@ -24,7 +27,9 @@ export const createCard = async (req, res) => {
       description,
       assigneeId,
       reporterId,
-      storyPoints,
+      actualTimeToComplete: actualTimeToComplete ?? 0,
+      priority: normalizedPriority,
+      labels: Array.isArray(labels) ? labels : [],
       ticketType: normalizedTicketType,
       position: count, // card goes last
     });

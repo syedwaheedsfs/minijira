@@ -26,8 +26,10 @@ const defaultValues = {
   description: "",
   assigneeId: "",
   reporterId: "",
-  storyPoints: "",
   ticketType: "",
+  actualTimeToComplete: "",
+  priority: "",
+  labels: [],
 };
 
 export default function CreateCardDialog({ open, onClose, boardId, columns }) {
@@ -43,6 +45,7 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
 
   const [submitError, setSubmitError] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const LABEL_OPTIONS = ["frontend", "backend", "api", "ui", "bug", "infra"];
 
   // keep boardId in sync when prop changes
   React.useEffect(() => {
@@ -80,10 +83,10 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
     // ensure storyPoints is a number or null
     const payload = {
       ...data,
-      storyPoints:
-        data.storyPoints === "" || data.storyPoints === null
-          ? null
-          : Number(data.storyPoints),
+      actualTimeToComplete:
+        data.actualTimeToComplete === "" || data.actualTimeToComplete == null
+          ? 0
+          : Number(data.actualTimeToComplete),
     };
 
     try {
@@ -231,20 +234,68 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
             )}
           />
 
-          {/* STORY POINTS */}
           <Controller
-            name="storyPoints"
+            name="actualTimeToComplete"
             control={control}
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Story Points"
+                label="Actual Time To Complete (hours)"
                 fullWidth
                 type="number"
                 margin="normal"
+                inputProps={{ min: 0, step: 0.25 }} // e.g. 0.25 increments
               />
             )}
           />
+
+          {/*  Priority */}
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Priority</InputLabel>
+            <Controller
+              name="priority"
+              control={control}
+              defaultValue=""
+              render={({ field }) => (
+                <Select
+                  {...field}
+                  label="Priority"
+                  value={field.value || ""}
+                >
+                  <MenuItem value="low">Low</MenuItem>
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="high">High</MenuItem>
+                  <MenuItem value="urgent">Urgent</MenuItem>
+                </Select>
+              )}
+            />
+          </FormControl>
+
+          {/* Labels */}
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Labels</InputLabel>
+            <Controller
+              name="labels"
+              control={control}
+              defaultValue={[]}
+              render={({ field }) => (
+                <Select
+                  {...field}
+                  label="Labels"
+                  multiple
+                  value={field.value || []}
+                  onChange={(event) => field.onChange(event.target.value)}
+                  renderValue={(selected) => (selected || []).join(", ")}
+                >
+                  {LABEL_OPTIONS.map((label) => (
+                    <MenuItem key={label} value={label}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+            />
+          </FormControl>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2 }}>
