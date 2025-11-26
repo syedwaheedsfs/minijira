@@ -1,4 +1,4 @@
-// src/api.js
+import axios from "axios";
 export const apiFetchColumns = async () => {
   const res = await fetch("http://localhost:5000/api/columns");
   if (!res.ok) {
@@ -59,3 +59,12 @@ export const apiMoveCard = async ({
 
   return res.json(); // { message, card }
 };
+
+// api for update card details
+export async function apiUpdateCard(cardId, updates) {
+  const res = await axios.patch(
+    `http://localhost:5000/api/cards/${cardId}`,
+    updates
+  );
+  return res.data;
+}

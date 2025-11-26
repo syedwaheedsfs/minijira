@@ -1,6 +1,6 @@
 // src/features/boardSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { apiFetchBoard, apiCreateCard } from "./jira/api.js";
+import { apiFetchBoard, apiCreateCard, apiUpdateCard } from "./jira/api.js";
 import { apiMoveCard } from "./jira/api";
 /**
  * GET /api/boards/:id
@@ -56,6 +56,18 @@ export const persistCardMove = createAsyncThunk(
   }
 );
 
+export const updateCard = createAsyncThunk(
+  "board/updateCard",
+  async ({ cardId, updates }, { rejectWithValue }) => {
+    try {
+      const updated = await apiUpdateCard(cardId, updates);
+      return updated; // updated card document
+    } catch (err) {
+      return rejectWithValue(err.message || "Failed to update card");
+    }
+  }
+);
+
 const initialState = {
   board: null, // {_id, title, description, ...}
   columns: [], // [{ id/_id, title, cards: [...] }, ...]
@@ -63,6 +75,8 @@ const initialState = {
   error: null,
   createLoading: false,
   createError: null,
+  updateLoading: false,
+  updateError: null,
 };
 
 const boardSlice = createSlice({
@@ -139,8 +153,6 @@ const boardSlice = createSlice({
           };
         });
 
-        // optional debug
-        // console.log("columns after grouping:", state.columns);
       })
       .addCase(fetchBoard.rejected, (state, action) => {
         state.loading = false;
@@ -185,6 +197,50 @@ const boardSlice = createSlice({
         state.createLoading = false;
         state.createError =
           action.payload || action.error?.message || "Create failed";
+      })
+      
+        // ---- updateCard ----
+      .addCase(updateCard.pending, (state) => {
+        state.updateLoading = true;
+        state.updateError = null;
+      })
+      .addCase(updateCard.fulfilled, (state, action) => {
+        state.updateLoading = false;
+        const updated = action.payload;
+        if (!updated) return;
+
+        const updatedId = (updated._id ?? updated.id)?.toString();
+
+        // Find & update the card in whichever column it lives
+        let foundColumn = null;
+        let foundIndex = -1;
+
+        state.columns.forEach((col) => {
+          if (!Array.isArray(col.cards)) return;
+          const idx = col.cards.findIndex(
+            (c) => (c._id ?? c.id)?.toString() === updatedId
+          );
+          if (idx !== -1) {
+            foundColumn = col;
+            foundIndex = idx;
+          }
+        });
+
+        if (!foundColumn || foundIndex === -1) return;
+
+        // Merge updated fields into existing card
+        foundColumn.cards[foundIndex] = {
+          ...foundColumn.cards[foundIndex],
+          ...updated,
+        };
+
+        // (Optional) if backend allows changing columnId in update,
+        // you could move the card to a different column here.
+      })
+      .addCase(updateCard.rejected, (state, action) => {
+        state.updateLoading = false;
+        state.updateError =
+          action.payload || action.error?.message || "Failed to update card";
       });
   },
 });

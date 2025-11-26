@@ -10,7 +10,7 @@ import {
 const router = express.Router();
 
 router.post("/", createCard);
-router.put("/:id", updateCard);
+router.patch("/:id", updateCard);
 router.patch("/:id/move", moveCard);
 router.delete("/:id", deleteCard);
 router.get("/:id", getCard);
