@@ -12,6 +12,7 @@ import {
   Button,
   Divider,
   TextField,
+  MenuItem,
 } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import { updateCard } from "../../boardSlice"; // ⬅️ make sure this exists
@@ -32,12 +33,12 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
     priority: "",
     labels: "",
     actualTimeToComplete: "",
+    columnId: "",
   });
 
-  // Sync form when card changes
-  React.useEffect(() => {
+// reset the old values when cancel is clicked
+  const hydrateFormFromCard = React.useCallback(() => {
     if (!card) return;
-    setIsEditing(false); // reset mode when opening another card
     setForm({
       title: card.title || "",
       description: card.description || "",
@@ -50,8 +51,30 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
         card.actualTimeToComplete != null
           ? String(card.actualTimeToComplete)
           : "",
+      columnId: card.columnId ? String(card.columnId) : "",
     });
   }, [card]);
+
+  // Sync form when card changes
+  React.useEffect(() => {
+    if (!card) return;
+    setIsEditing(false); // reset mode when opening another card
+    // setForm({
+    //   title: card.title || "",
+    //   description: card.description || "",
+    //   assigneeId: card.assigneeId || "",
+    //   reporterId: card.reporterId || "",
+    //   ticketType: card.ticketType || "",
+    //   priority: card.priority || "",
+    //   labels: (card.labels || []).join(", "),
+    //   actualTimeToComplete:
+    //     card.actualTimeToComplete != null
+    //       ? String(card.actualTimeToComplete)
+    //       : "",
+    //   columnId: card.columnId ? String(card.columnId) : "",
+    // });
+     hydrateFormFromCard();
+  }, [card, hydrateFormFromCard]);
 
   const boardName = board?.title || board?.name || "My Board";
 
@@ -101,6 +124,7 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
       reporterId: form.reporterId.trim() || null,
       ticketType: form.ticketType.trim() || null,
       priority: form.priority.trim() || null,
+      columnId: form.columnId,
       actualTimeToComplete:
         form.actualTimeToComplete !== ""
           ? Number(form.actualTimeToComplete)
@@ -114,27 +138,28 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
     };
     console.log("[CardDetailsDialog] Save clicked", { cardId, updates });
     try {
-       const updatedCard = await dispatch(
-         updateCard({
-           cardId,
-           updates,
-         })
-       ).unwrap();
-       console.log("Updated from API:", updatedCard);
+      const updatedCard = await dispatch(
+        updateCard({
+          cardId: card._id,
+          updates,
+        })
+      ).unwrap();
+      console.log("Updated from API:", updatedCard);
 
-       setForm({
-         title: updatedCard.title || "",
-         description: updatedCard.description || "",
-         assigneeId: updatedCard.assigneeId || "",
-         reporterId: updatedCard.reporterId || "",
-         ticketType: updatedCard.ticketType || "",
-         priority: updatedCard.priority || "",
-         labels: (updatedCard.labels || []).join(", "),
-         actualTimeToComplete:
-           updatedCard.actualTimeToComplete != null
-             ? String(updatedCard.actualTimeToComplete)
-             : "",
-       });
+      setForm({
+        title: updatedCard.title || "",
+        description: updatedCard.description || "",
+        assigneeId: updatedCard.assigneeId || "",
+        reporterId: updatedCard.reporterId || "",
+        ticketType: updatedCard.ticketType || "",
+        priority: updatedCard.priority || "",
+        labels: (updatedCard.labels || []).join(", "),
+        actualTimeToComplete:
+          updatedCard.actualTimeToComplete != null
+            ? String(updatedCard.actualTimeToComplete)
+            : "",
+        columnId: updatedCard.columnId ? String(updatedCard.columnId) : "",
+      });
 
       setIsEditing(false);
     } catch (err) {
@@ -148,6 +173,16 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
     onClose?.();
   };
 
+  const handleCancel = () => {
+    hydrateFormFromCard(); // 🔙 throw away unsaved edits
+    setIsEditing(false);
+  };
+  
+const statusLabel =
+  columns.find(
+    (col) => (col._id ?? col.id)?.toString() === form.columnId?.toString()
+  )?.title ?? "To Do";
+  
   return (
     <Dialog
       open={open}
@@ -236,19 +271,84 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
             }}
           >
             {/* Status row */}
-            <Stack
+            {/* <Stack
               direction="row"
               spacing={1}
               alignItems="center"
               sx={{ mb: 2 }}
             >
-              {/* <Chip size="small" label={status} color="default" /> */}
+              <Chip size="small" label={status} color="default" />
               {form.priority && (
                 <Chip
                   size="small"
                   label={`Priority: ${form.priority}`}
                   variant="outlined"
                 />
+              )}
+            </Stack> */}
+
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{ mb: 2, flexWrap: "wrap" }}
+            >
+              {isEditing ? (
+                <>
+                  {/* 🔹 Status select */}
+                  <TextField
+                    select
+                    size="small"
+                    label="Status"
+                    value={form.columnId || ""}
+                    onChange={handleChange("columnId")}
+                    sx={{ minWidth: 140 }}
+                  >
+                    {columns.map((col) => (
+                      <MenuItem
+                        key={col._id ?? col.id}
+                        value={col._id ?? col.id}
+                      >
+                        {col.title}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    select
+                    size="small"
+                    label="Priority"
+                    value={form.priority || ""}
+                    onChange={(e) => {
+                      const selectedPriority = e.target.value;
+                      setForm((prev) => ({
+                        ...prev,
+                        priority: selectedPriority,
+                      }));
+                    }}
+                    sx={{ minWidth: 140 }}
+                  >
+                    <MenuItem value="low">Low</MenuItem>
+                    <MenuItem value="medium">Medium</MenuItem>
+                    <MenuItem value="high">High</MenuItem>
+                    <MenuItem value="urgent">Urgent</MenuItem>
+                  </TextField>
+                </>
+              ) : (
+                <>
+                  <Chip
+                    size="small"
+                    label={`Status:${statusLabel}` || "To Do"}
+                    color="default"
+                  />
+                  {form.priority && (
+                    <Chip
+                      size="small"
+                      label={`Priority: ${form.priority}`}
+                      variant="outlined"
+                    />
+                  )}
+                </>
               )}
             </Stack>
 
@@ -356,9 +456,9 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
               <Typography variant="body2" sx={{ mb: 0.5 }}>
                 <strong>Board:</strong> {boardName}
               </Typography>
-              <Typography variant="body2">
+              {/* <Typography variant="body2">
                 <strong>Status:</strong> {columnName}
-              </Typography>
+              </Typography> */}
             </Box>
 
             {/* Labels */}
@@ -411,7 +511,7 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
       <DialogActions>
         {isEditing ? (
           <>
-            <Button onClick={() => setIsEditing(false)}>Cancel</Button>
+            <Button onClick={handleCancel}>Cancel</Button>
             <Button variant="contained" onClick={handleSave}>
               Save
             </Button>

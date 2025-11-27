@@ -152,7 +152,6 @@ const boardSlice = createSlice({
             cards: cardsByColumnId[colId] || [], // all cards that belong to this column
           };
         });
-
       })
       .addCase(fetchBoard.rejected, (state, action) => {
         state.loading = false;
@@ -198,8 +197,8 @@ const boardSlice = createSlice({
         state.createError =
           action.payload || action.error?.message || "Create failed";
       })
-      
-        // ---- updateCard ----
+
+      // ---- updateCard ----
       .addCase(updateCard.pending, (state) => {
         state.updateLoading = true;
         state.updateError = null;
@@ -210,32 +209,64 @@ const boardSlice = createSlice({
         if (!updated) return;
 
         const updatedId = (updated._id ?? updated.id)?.toString();
-
+        const newColumnId = updated.columnId ? String(updated.columnId) : null;
         // Find & update the card in whichever column it lives
-        let foundColumn = null;
-        let foundIndex = -1;
+        // let foundColumn = null;
+        // let foundIndex = -1;
+        let oldColumn = null;
+        let oldIndex = -1;
 
+        // state.columns.forEach((col) => {
+        //   if (!Array.isArray(col.cards)) return;
+        //   const idx = col.cards.findIndex(
+        //     (c) => (c._id ?? c.id)?.toString() === updatedId
+        //   );
+        //   if (idx !== -1) {
+        //     foundColumn = col;
+        //     foundIndex = idx;
+        //   }
+        // });
+
+        // find current column + index
         state.columns.forEach((col) => {
           if (!Array.isArray(col.cards)) return;
           const idx = col.cards.findIndex(
             (c) => (c._id ?? c.id)?.toString() === updatedId
           );
           if (idx !== -1) {
-            foundColumn = col;
-            foundIndex = idx;
+            oldColumn = col;
+            oldIndex = idx;
           }
         });
 
-        if (!foundColumn || foundIndex === -1) return;
+        if (!oldColumn || oldIndex === -1) return;
+
+        // if (!foundColumn || foundIndex === -1) return;
 
         // Merge updated fields into existing card
-        foundColumn.cards[foundIndex] = {
-          ...foundColumn.cards[foundIndex],
-          ...updated,
-        };
+        // foundColumn.cards[foundIndex] = {
+        //   ...foundColumn.cards[foundIndex],
+        //   ...updated,
+        // };
 
-        // (Optional) if backend allows changing columnId in update,
-        // you could move the card to a different column here.
+        const oldColumnId = String(oldColumn._id ?? oldColumn.id);
+        if (!newColumnId || newColumnId === oldColumnId) {
+          oldColumn.cards[oldIndex] = {
+            ...oldColumn.cards[oldIndex],
+            ...updated,
+          };
+        } else {
+          const movedCard = { ...oldColumn.cards[oldIndex], ...updated };
+          oldColumn.cards.splice(oldIndex, 1);
+
+          const targetCol = state.columns.find(
+            (c) => String(c._id ?? c.id) === newColumnId
+          );
+          if (targetCol) {
+            if (!Array.isArray(targetCol.cards)) targetCol.cards = [];
+            targetCol.cards.push(movedCard);
+          }
+        }
       })
       .addCase(updateCard.rejected, (state, action) => {
         state.updateLoading = false;
