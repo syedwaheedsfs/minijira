@@ -14,12 +14,13 @@ export const createCard = async (req, res) => {
       priority,
       labels,
       ticketType,
+      originalEstimate,
     } = req.body;
 
     // Get next position in column
     const count = await Card.countDocuments({ columnId });
-  const normalizedTicketType = ticketType.toLowerCase();
-   const normalizedPriority = (priority || "medium").toLowerCase();
+    const normalizedTicketType = ticketType.toLowerCase();
+    const normalizedPriority = (priority || "medium").toLowerCase();
     const card = await Card.create({
       boardId,
       columnId,
@@ -32,6 +33,7 @@ export const createCard = async (req, res) => {
       labels: Array.isArray(labels) ? labels : [],
       ticketType: normalizedTicketType,
       position: count, // card goes last
+      originalEstimate,
     });
 
     res.status(201).json(card);
@@ -39,7 +41,6 @@ export const createCard = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
 
 export const moveCard = async (req, res) => {
   try {
@@ -52,12 +53,10 @@ export const moveCard = async (req, res) => {
       fromPosition == null ||
       toPosition == null
     ) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "fromColumnId, toColumnId, fromPosition, toPosition are required",
-        });
+      return res.status(400).json({
+        error:
+          "fromColumnId, toColumnId, fromPosition, toPosition are required",
+      });
     }
 
     // 1) Moving inside the SAME column

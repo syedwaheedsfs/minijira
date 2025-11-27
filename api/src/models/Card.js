@@ -20,10 +20,11 @@ const CardSchema = new mongoose.Schema(
       required: true,
     },
 
-    // labels: {
-    //   type: [String],
-    //   default: [],
-    // },
+    originalEstimate: {
+      type: Number, 
+      default: 0,
+    },
+    
     labels: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -14,6 +14,8 @@ import {
   TextField,
   MenuItem,
 } from "@mui/material";
+import { Collapse, IconButton } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useDispatch, useSelector } from "react-redux";
 import { updateCard, createLabel } from "../../boardSlice";
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
@@ -25,9 +27,14 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
   const board = useSelector((state) => state.board.board || {});
   const labels = useSelector((state) => state.board.labels || []);
   const filter = createFilterOptions();
-console.log("labels from API:", labels);
+  console.log("labels from API:", labels);
+
   // 🔹 Local edit mode + form state
   const [isEditing, setIsEditing] = React.useState(false);
+
+  // ✅ Track the last successfully saved state
+  const [lastSavedState, setLastSavedState] = React.useState(null);
+
   const [form, setForm] = React.useState({
     title: "",
     description: "",
@@ -38,28 +45,36 @@ console.log("labels from API:", labels);
     labels: [],
     actualTimeToComplete: "",
     columnId: "",
+    originalEstimate: "",
   });
 
-// reset the old values when cancel is clicked
-  const hydrateFormFromCard = React.useCallback(() => {
-    if (!card) return;
+  // reset the old values when cancel is clicked
+  const hydrateFormFromCard = React.useCallback((sourceData) => {
+    if (!sourceData) return;
+
     setForm({
-      title: card.title || "",
-      description: card.description || "",
-      assigneeId: card.assigneeId || "",
-      reporterId: card.reporterId || "",
-      ticketType: card.ticketType || "",
-      priority: card.priority || "",
-      labels: Array.isArray(card.labels)
-        ? card.labels.map((l) => (typeof l === "string" ? l : String(l._id)))
+      title: sourceData.title || "",
+      description: sourceData.description || "",
+      assigneeId: sourceData.assigneeId || "",
+      reporterId: sourceData.reporterId || "",
+      ticketType: sourceData.ticketType || "",
+      priority: sourceData.priority || "",
+      labels: Array.isArray(sourceData.labels)
+        ? sourceData.labels.map((l) =>
+            typeof l === "string" ? l : String(l._id)
+          )
         : [],
       actualTimeToComplete:
-        card.actualTimeToComplete != null
-          ? String(card.actualTimeToComplete)
+        sourceData.actualTimeToComplete != null
+          ? String(sourceData.actualTimeToComplete)
           : "",
-      columnId: card.columnId ? String(card.columnId) : "",
+      columnId: sourceData.columnId ? String(sourceData.columnId) : "",
+      originalEstimate:
+        sourceData.originalEstimate != null && sourceData.originalEstimate !== 0
+          ? String(sourceData.originalEstimate)
+          : "",
     });
-  }, [card]);
+  }, []);
 
   const selectedLabelObjects = React.useMemo(
     () =>
@@ -69,26 +84,23 @@ console.log("labels from API:", labels);
     [form.labels, labels]
   );
 
-  // Sync form when card changes
+  // Sync form when card changes (only when opening a NEW card)
   React.useEffect(() => {
     if (!card) return;
-    setIsEditing(false); // reset mode when opening another card
-    // setForm({
-    //   title: card.title || "",
-    //   description: card.description || "",
-    //   assigneeId: card.assigneeId || "",
-    //   reporterId: card.reporterId || "",
-    //   ticketType: card.ticketType || "",
-    //   priority: card.priority || "",
-    //   labels: (card.labels || []).join(", "),
-    //   actualTimeToComplete:
-    //     card.actualTimeToComplete != null
-    //       ? String(card.actualTimeToComplete)
-    //       : "",
-    //   columnId: card.columnId ? String(card.columnId) : "",
-    // });
-     hydrateFormFromCard();
-  }, [card, hydrateFormFromCard]);
+
+    // ✅ Check if this is a different card or first load
+    const currentCardId = card._id ?? card.id;
+    const savedCardId = lastSavedState?._id ?? lastSavedState?.id;
+
+    // Reset and hydrate if:
+    // 1. No saved state yet (first load), OR
+    // 2. Different card ID (switched cards)
+    if (!lastSavedState || currentCardId !== savedCardId) {
+      setIsEditing(false);
+      setLastSavedState(null);
+      hydrateFormFromCard(card);
+    }
+  }, [card, lastSavedState, hydrateFormFromCard]);
 
   const boardName = board?.title || board?.name || "My Board";
 
@@ -123,8 +135,12 @@ console.log("labels from API:", labels);
           ? Number(form.actualTimeToComplete)
           : null,
       labels: form.labels,
+      originalEstimate:
+        form.originalEstimate !== "" && form.originalEstimate != null
+          ? Number(form.originalEstimate)
+          : null,
     };
-    // console.log("[CardDetailsDialog] Save clicked", { cardId, updates });
+
     try {
       const updatedCard = await dispatch(
         updateCard({
@@ -132,8 +148,11 @@ console.log("labels from API:", labels);
           updates,
         })
       ).unwrap();
-    //   console.log("Updated from API:", updatedCard);
 
+      // ✅ Store the successfully saved state
+      setLastSavedState(updatedCard);
+
+      // ✅ FIXED: Use consistent hydration logic after save
       setForm({
         title: updatedCard.title || "",
         description: updatedCard.description || "",
@@ -151,6 +170,12 @@ console.log("labels from API:", labels);
             ? String(updatedCard.actualTimeToComplete)
             : "",
         columnId: updatedCard.columnId ? String(updatedCard.columnId) : "",
+        // ✅ Apply same logic as hydrateFormFromCard
+        originalEstimate:
+          updatedCard.originalEstimate != null &&
+          updatedCard.originalEstimate !== 0
+            ? String(updatedCard.originalEstimate)
+            : "",
       });
 
       setIsEditing(false);
@@ -166,15 +191,17 @@ console.log("labels from API:", labels);
   };
 
   const handleCancel = () => {
-    hydrateFormFromCard(); // 🔙 throw away unsaved edits
+    // ✅ Use lastSavedState if exists, otherwise original card
+    const sourceData = lastSavedState || card;
+    hydrateFormFromCard(sourceData);
     setIsEditing(false);
   };
-  
-const statusLabel =
-  columns.find(
-    (col) => (col._id ?? col.id)?.toString() === form.columnId?.toString()
-  )?.title ?? "To Do";
-  
+
+  const statusLabel =
+    columns.find(
+      (col) => (col._id ?? col.id)?.toString() === form.columnId?.toString()
+    )?.title ?? "To Do";
+
   return (
     <Dialog
       open={open}
@@ -262,23 +289,6 @@ const statusLabel =
               overflowY: "auto",
             }}
           >
-            {/* Status row */}
-            {/* <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              sx={{ mb: 2 }}
-            >
-              <Chip size="small" label={status} color="default" />
-              {form.priority && (
-                <Chip
-                  size="small"
-                  label={`Priority: ${form.priority}`}
-                  variant="outlined"
-                />
-              )}
-            </Stack> */}
-
             <Stack
               direction="row"
               spacing={1}
@@ -305,7 +315,7 @@ const statusLabel =
                       </MenuItem>
                     ))}
                   </TextField>
-
+{/* 
                   <TextField
                     select
                     size="small"
@@ -324,7 +334,7 @@ const statusLabel =
                     <MenuItem value="medium">Medium</MenuItem>
                     <MenuItem value="high">High</MenuItem>
                     <MenuItem value="urgent">Urgent</MenuItem>
-                  </TextField>
+                  </TextField> */}
                 </>
               ) : (
                 <>
@@ -333,13 +343,13 @@ const statusLabel =
                     label={`Status:${statusLabel}` || "To Do"}
                     color="default"
                   />
-                  {form.priority && (
+                  {/* {form.priority && (
                     <Chip
                       size="small"
                       label={`Priority: ${form.priority}`}
                       variant="outlined"
                     />
-                  )}
+                  )} */}
                 </>
               )}
             </Stack>
@@ -349,10 +359,37 @@ const statusLabel =
               <Typography variant="subtitle2" gutterBottom>
                 My pinned fields
               </Typography>
-              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                <strong>Original estimate:</strong>{" "}
-                <span style={{ opacity: 0.7 }}>Add estimate</span>
-              </Typography>
+              <Box sx={{ mb: 0.5, display: "flex", alignItems: "center" }}>
+                <Typography variant="body2" component="span">
+                  <strong>Original estimate:</strong>
+                </Typography>
+
+                {isEditing ? (
+                  <TextField
+                    size="small"
+                    type="number"
+                    inputProps={{ min: 0 }}
+                    value={form.originalEstimate}
+                    onChange={handleChange("originalEstimate")}
+                    sx={{ width: 100, ml: 1 }}
+                  />
+                ) : form.originalEstimate !== "" &&
+                  form.originalEstimate != null ? (
+                  // ✅ FIXED: Use form.originalEstimate instead of card.originalEstimate
+                  <Typography variant="body2" component="span" sx={{ ml: 1 }}>
+                    {form.originalEstimate}h
+                  </Typography>
+                ) : (
+                  <Typography
+                    variant="body2"
+                    component="span"
+                    sx={{ ml: 1, opacity: 0.7 }}
+                  >
+                    Add estimate
+                  </Typography>
+                )}
+              </Box>
+
               <Box sx={{ display: "flex", alignItems: "center" }}>
                 <Typography variant="body2" component="span">
                   <strong>Actual time:</strong>
@@ -367,9 +404,11 @@ const statusLabel =
                     onChange={handleChange("actualTimeToComplete")}
                     sx={{ width: 100, ml: 1 }}
                   />
-                ) : card.actualTimeToComplete != null ? (
+                ) : form.actualTimeToComplete !== "" &&
+                  form.actualTimeToComplete != null ? (
+                  // ✅ FIXED: Use form.actualTimeToComplete (consistent with form state)
                   <Typography variant="body2" component="span" sx={{ ml: 1 }}>
-                    {card.actualTimeToComplete}h
+                    {form.actualTimeToComplete}h
                   </Typography>
                 ) : (
                   <Typography
@@ -403,7 +442,7 @@ const statusLabel =
                     onChange={handleChange("assigneeId")}
                     sx={{ ml: 1 }}
                   />
-                ) : card.assigneeId ? (
+                ) : form.assigneeId ? (
                   <Typography variant="body2" component="span" sx={{ ml: 1 }}>
                     {form.assigneeId}
                   </Typography>
@@ -430,7 +469,7 @@ const statusLabel =
                     onChange={handleChange("reporterId")}
                     sx={{ ml: 1 }}
                   />
-                ) : card.reporterId ? (
+                ) : form.reporterId ? (
                   <Typography variant="body2" component="span" sx={{ ml: 1 }}>
                     {form.reporterId}
                   </Typography>
@@ -448,212 +487,46 @@ const statusLabel =
               <Typography variant="body2" sx={{ mb: 0.5 }}>
                 <strong>Board:</strong> {boardName}
               </Typography>
-              {/* <Typography variant="body2">
-                <strong>Status:</strong> {columnName}
-              </Typography> */}
-            </Box>
-
-            {/* Labels */}
-            {/* Labels */}
-            {/* <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" >
-                Labels
-              </Typography>
-
-              {isEditing ? (
-                <Autocomplete
-                  multiple
-                  freeSolo
-                  disableCloseOnSelect
-                  size="small"
-                  fullWidth
-                  options={labels}
-                  value={selectedLabelObjects}
-                  openOnFocus
-                  selectOnFocus
-                  handleHomeEndKeys
-                  isOptionEqualToValue={(option, value) =>
-                    String(option._id) === String(value._id)
-                  }
-                  getOptionLabel={(option) => {
-                    // option can be: string, {inputValue}, or label object
-                    if (typeof option === "string") return option;
-                    if (option.inputValue) return option.inputValue;
-                    return option.displayName || option.name || "";
-                  }}
-                  filterOptions={(options, params) => {
-                    const filtered = filter(options, params);
-                    const { inputValue } = params;
-
-                    const isExisting = options.some((option) => {
-                      const text = (
-                        option.displayName ||
-                        option.name ||
-                        ""
-                      ).toLowerCase();
-                      return text === inputValue.toLowerCase();
-                    });
-
-                    if (inputValue !== "" && !isExisting) {
-                      filtered.push({
-                        inputValue,
-                        name: `Create "${inputValue}"`,
-                        isNew: true,
-                      });
-                    }
-
-                    return filtered;
-                  }}
-                  onChange={async (event, newValue) => {
-                    const finalIds = [];
-
-                    for (const v of newValue) {
-                      // user just typed and hit Enter → plain string
-                      if (typeof v === "string" && v.trim() !== "") {
-                        try {
-                          const created = await dispatch(
-                            createLabel({ name: v.trim() })
-                          ).unwrap();
-                          finalIds.push(String(created._id));
-                        } catch (err) {
-                          console.error(
-                            "Failed to create label from string:",
-                            err
-                          );
-                        }
-                      }
-                      // user picked "Create \"xyz\"" option
-                      else if (v && v.isNew && v.inputValue) {
-                        try {
-                          const created = await dispatch(
-                            createLabel({ name: v.inputValue.trim() })
-                          ).unwrap();
-                          finalIds.push(String(created._id));
-                        } catch (err) {
-                          console.error(
-                            "Failed to create label from option:",
-                            err
-                          );
-                        }
-                      }
-                      // existing label picked from dropdown
-                      else if (v && v._id) {
-                        finalIds.push(String(v._id));
-                      }
-                    }
-
-                    setForm((prev) => ({
-                      ...prev,
-                      labels: finalIds,
-                    }));
-                  }}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => {
-                      const labelText = option.displayName || option.name || "";
-                      return (
-                        <Chip
-                          {...getTagProps({ index })}
-                          key={option._id || labelText}
-                          label={labelText}
-                          size="small"
-                          sx={{
-                            borderRadius: 0.5,
-                            border: "1px solid #0052cc", // ✅ Colored border
-                            backgroundColor: "transparent", // ✅ No background
-                            color: "#172b4d", // Text color// Optional: Jira-like border
-                          }}
-                        />
-                      );
-                    })
-                  }
-                  renderOption={(props, option) => {
-                    // Header "All labels" – show only once at top
-                    if (option.isNew) {
-                      // "Create ..." row
-                      return (
-                        <li {...props}>
-                          <Chip
-                            label={option.name}
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                              borderRadius: 0.5,
-                              border: "1px solid #0052cc",
-                              backgroundColor: "transparent",
-                              color: "#172b4d",
-                            }}
-                          />
-                        </li>
-                      );
-                    }
-
-                    const labelText = option.displayName || option.name || "";
-                    return (
-                      <li {...props}>
-                        <Chip
-                          label={labelText}
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            borderRadius: 0.5,
-                            border: "1px solid #0052cc",
-                            backgroundColor: "transparent",
-                            color: "#172b4d",
-                          }}
-                        />
-                      </li>
-                    );
-                  }}
-                  renderGroup={(params) => (
-                    <li key={params.key}>
-                      <ListSubheader
-                        disableSticky
-                        sx={{ fontSize: 12, lineHeight: 1.5, py: 0.5 }}
-                      >
-                        All labels
-                      </ListSubheader>
-                      <ul style={{ paddingLeft: 0, margin: 0 }}>
-                        {params.children}
-                      </ul>
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Labels"
-                      placeholder="Select or type to create"
-                    />
-                  )}
-                />
-              ) : form.labels && form.labels.length > 0 ? (
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {form.labels.map((labelId) => {
-                    const label = labels.find(
-                      (l) => String(l._id) === String(labelId)
-                    );
-                    const text = label?.displayName || label?.name || labelId;
-                    return (
-                      <Chip
-                        key={labelId}
-                        label={text}
-                        size="small"
-                        sx={{
-                        //   mb: 1,
-                          borderRadius: 0.8,
-                          border: "1.5px solid #0052cc", // ✅ Colored border
-                          backgroundColor: "transparent", // ✅ No background
-                          color: "#172b4d",
-                        }}
-                      />
-                    );
-                  })}
-                </Stack>
-              ) : (
-                <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                  No labels.
+              <Box sx={{ mb: 0.5, display: "flex", alignItems: "center" }}>
+                <Typography variant="body2" component="span">
+                  <strong>Priority:</strong>
                 </Typography>
-              )}
-            </Box> */}
+
+                {isEditing ? (
+                  <TextField
+                    select
+                    size="small"
+                    value={form.priority || ""}
+                    onChange={(e) => {
+                      const selectedPriority = e.target.value;
+                      setForm((prev) => ({
+                        ...prev,
+                        priority: selectedPriority,
+                      }));
+                    }}
+                    sx={{ ml: 1, minWidth: 140 }}
+                  >
+                    <MenuItem value="low">Low</MenuItem>
+                    <MenuItem value="medium">Medium</MenuItem>
+                    <MenuItem value="high">High</MenuItem>
+                    <MenuItem value="urgent">Urgent</MenuItem>
+                  </TextField>
+                ) : form.priority ? (
+                  <Typography variant="body2" component="span" sx={{ ml: 1 }}>
+                    {form.priority.charAt(0).toUpperCase() +
+                      form.priority.slice(1)}
+                  </Typography>
+                ) : (
+                  <Typography
+                    variant="body2"
+                    component="span"
+                    sx={{ ml: 1, opacity: 0.7 }}
+                  >
+                    Not set
+                  </Typography>
+                )}
+              </Box>
+            </Box>
 
             {/* Labels */}
             <Box sx={{ mb: 3 }}>
@@ -840,7 +713,7 @@ const statusLabel =
                         gap: 0.5,
                         alignItems: "flex-start",
                         "& > *": {
-                          margin: "0 !important", 
+                          margin: "0 !important",
                           marginLeft: "0 !important",
                         },
                       }}
