@@ -2,6 +2,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { apiFetchBoard, apiCreateCard, apiUpdateCard } from "./jira/api.js";
 import { apiMoveCard } from "./jira/api";
+import { apiCreateLabel } from "./jira/api.js";
 /**
  * GET /api/boards/:id
  * Expected (recommended) response:
@@ -68,9 +69,22 @@ export const updateCard = createAsyncThunk(
   }
 );
 
+export const createLabel = createAsyncThunk(
+  "board/createLabel",
+  async ({ name }, { rejectWithValue }) => {
+    try {
+      const label = await apiCreateLabel({ name });
+      return label;
+    } catch (err) {
+      return rejectWithValue(err.message || "Failed to create label");
+    }
+  }
+);
+
 const initialState = {
   board: null, // {_id, title, description, ...}
   columns: [], // [{ id/_id, title, cards: [...] }, ...]
+  labels: [],
   loading: false,
   error: null,
   createLoading: false,
@@ -129,9 +143,10 @@ const boardSlice = createSlice({
         const payload = action.payload || {};
 
         // backend: { board, columns, cards }
-        const { board, columns = [], cards = [] } = payload;
+        const { board, columns = [], cards = [], labels = [] } = payload;
 
         state.board = board || null;
+        state.labels = labels || [];
 
         const toId = (v) => (v != null ? String(v) : "");
 
@@ -272,7 +287,20 @@ const boardSlice = createSlice({
         state.updateLoading = false;
         state.updateError =
           action.payload || action.error?.message || "Failed to update card";
-      });
+      })
+
+      //case for creating label
+      .addCase(createLabel.fulfilled, (state, action) => {
+          const label = action.payload;
+          if (!label) return;
+
+          const exists = state.labels.some(
+            (l) => String(l._id) === String(label._id)
+          );
+          if (!exists) {
+            state.labels.push(label);
+          }
+        });
   },
 });
 

@@ -136,9 +136,18 @@ export const updateCard = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const updates = { ...req.body };
+
+    // Ensure labels is an array of ObjectIds (if provided)
+    if (Array.isArray(updates.labels)) {
+      // no-op if already IDs; Mongoose will cast
+    } else {
+      delete updates.labels;
+    }
+
     const card = await Card.findByIdAndUpdate(id, req.body, {
       new: true,
-    });
+    }).populate("labels");
 
     res.json(card);
   } catch (err) {

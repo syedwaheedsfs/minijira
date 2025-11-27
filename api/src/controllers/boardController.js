@@ -1,6 +1,7 @@
 import Board from "../models/Board.js";
 import Column from "../models/Column.js";
 import Card from "../models/Card.js";
+import Label from "../models/Label.js";
 
 export const getBoard = async (req, res) => {
   try {
@@ -11,9 +12,15 @@ export const getBoard = async (req, res) => {
 
     const columns = await Column.find({ boardId }).sort({ position: 1 });
 
-    const cards = await Card.find({ boardId }).sort({ position: 1 });
+    const cards = await Card.find({ boardId })
+      .sort({ position: 1 })
+      .populate("labels");
 
-    res.status(200).json({ board, columns, cards });
+    const labels = await Label.find({}).lean();
+    // OR if you want board-specific:
+    // const labels = await label.find({ boardId }).lean();
+
+    res.status(200).json({ board, columns, cards, labels });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -20,10 +20,16 @@ const CardSchema = new mongoose.Schema(
       required: true,
     },
 
-    labels: {
-      type: [String], 
-      default: [],
-    },
+    // labels: {
+    //   type: [String],
+    //   default: [],
+    // },
+    labels: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Label",
+      },
+    ],
 
     ticketType: {
       type: String,

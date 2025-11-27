@@ -15,13 +15,17 @@ import {
   MenuItem,
 } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
-import { updateCard } from "../../boardSlice"; // ⬅️ make sure this exists
+import { updateCard, createLabel } from "../../boardSlice";
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete";
+import ListSubheader from "@mui/material/ListSubheader";
 
 const CardDetailsDialog = ({ open, card, onClose }) => {
   const dispatch = useDispatch();
   const columns = useSelector((state) => state.board.columns || []);
   const board = useSelector((state) => state.board.board || {});
-
+  const labels = useSelector((state) => state.board.labels || []);
+  const filter = createFilterOptions();
+console.log("labels from API:", labels);
   // 🔹 Local edit mode + form state
   const [isEditing, setIsEditing] = React.useState(false);
   const [form, setForm] = React.useState({
@@ -31,7 +35,7 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
     reporterId: "",
     ticketType: "",
     priority: "",
-    labels: "",
+    labels: [],
     actualTimeToComplete: "",
     columnId: "",
   });
@@ -46,7 +50,9 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
       reporterId: card.reporterId || "",
       ticketType: card.ticketType || "",
       priority: card.priority || "",
-      labels: (card.labels || []).join(", "),
+      labels: Array.isArray(card.labels)
+        ? card.labels.map((l) => (typeof l === "string" ? l : String(l._id)))
+        : [],
       actualTimeToComplete:
         card.actualTimeToComplete != null
           ? String(card.actualTimeToComplete)
@@ -54,6 +60,14 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
       columnId: card.columnId ? String(card.columnId) : "",
     });
   }, [card]);
+
+  const selectedLabelObjects = React.useMemo(
+    () =>
+      (form.labels || [])
+        .map((id) => labels.find((l) => String(l._id) === String(id)))
+        .filter(Boolean),
+    [form.labels, labels]
+  );
 
   // Sync form when card changes
   React.useEffect(() => {
@@ -77,27 +91,6 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
   }, [card, hydrateFormFromCard]);
 
   const boardName = board?.title || board?.name || "My Board";
-
-  const status =
-    React.useMemo(() => {
-      if (!card) return "To Do";
-
-      const cardId = card._id ?? card.id;
-
-      const colWithCard = columns.find((col) =>
-        (col.cards || []).some((c) => (c._id ?? c.id) === cardId)
-      );
-      if (colWithCard) return colWithCard.title;
-
-      if (card.columnId) {
-        const col = columns.find(
-          (c) => c._id === card.columnId || c.id === card.columnId
-        );
-        if (col) return col.title;
-      }
-
-      return "To Do";
-    }, [columns, card]) || "To Do";
 
   const column = React.useMemo(() => {
     if (!card?.columnId) return null;
@@ -129,14 +122,9 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
         form.actualTimeToComplete !== ""
           ? Number(form.actualTimeToComplete)
           : null,
-      labels: form.labels
-        ? form.labels
-            .split(",")
-            .map((l) => l.trim())
-            .filter(Boolean)
-        : [],
+      labels: form.labels,
     };
-    console.log("[CardDetailsDialog] Save clicked", { cardId, updates });
+    // console.log("[CardDetailsDialog] Save clicked", { cardId, updates });
     try {
       const updatedCard = await dispatch(
         updateCard({
@@ -144,7 +132,7 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
           updates,
         })
       ).unwrap();
-      console.log("Updated from API:", updatedCard);
+    //   console.log("Updated from API:", updatedCard);
 
       setForm({
         title: updatedCard.title || "",
@@ -153,7 +141,11 @@ const CardDetailsDialog = ({ open, card, onClose }) => {
         reporterId: updatedCard.reporterId || "",
         ticketType: updatedCard.ticketType || "",
         priority: updatedCard.priority || "",
-        labels: (updatedCard.labels || []).join(", "),
+        labels: Array.isArray(updatedCard.labels)
+          ? updatedCard.labels.map((l) =>
+              typeof l === "string" ? l : String(l._id)
+            )
+          : [],
         actualTimeToComplete:
           updatedCard.actualTimeToComplete != null
             ? String(updatedCard.actualTimeToComplete)
@@ -191,7 +183,7 @@ const statusLabel =
       maxWidth="lg"
       PaperProps={{
         sx: {
-          borderRadius: 2,
+          borderRadius: 0.8,
           maxHeight: "90vh",
         },
       }}
@@ -462,34 +454,430 @@ const statusLabel =
             </Box>
 
             {/* Labels */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle2" gutterBottom>
+            {/* Labels */}
+            {/* <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" >
                 Labels
               </Typography>
+
               {isEditing ? (
-                <TextField
-                  fullWidth
+                <Autocomplete
+                  multiple
+                  freeSolo
+                  disableCloseOnSelect
                   size="small"
-                  placeholder="comma,separated,labels"
-                  value={form.labels}
-                  onChange={handleChange("labels")}
-                />
-              ) : card.labels && card.labels.length > 0 ? (
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {card.labels.map((label) => (
-                    <Chip
-                      key={label}
-                      label={label}
-                      size="small"
-                      sx={{ mb: 1 }}
+                  fullWidth
+                  options={labels}
+                  value={selectedLabelObjects}
+                  openOnFocus
+                  selectOnFocus
+                  handleHomeEndKeys
+                  isOptionEqualToValue={(option, value) =>
+                    String(option._id) === String(value._id)
+                  }
+                  getOptionLabel={(option) => {
+                    // option can be: string, {inputValue}, or label object
+                    if (typeof option === "string") return option;
+                    if (option.inputValue) return option.inputValue;
+                    return option.displayName || option.name || "";
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = filter(options, params);
+                    const { inputValue } = params;
+
+                    const isExisting = options.some((option) => {
+                      const text = (
+                        option.displayName ||
+                        option.name ||
+                        ""
+                      ).toLowerCase();
+                      return text === inputValue.toLowerCase();
+                    });
+
+                    if (inputValue !== "" && !isExisting) {
+                      filtered.push({
+                        inputValue,
+                        name: `Create "${inputValue}"`,
+                        isNew: true,
+                      });
+                    }
+
+                    return filtered;
+                  }}
+                  onChange={async (event, newValue) => {
+                    const finalIds = [];
+
+                    for (const v of newValue) {
+                      // user just typed and hit Enter → plain string
+                      if (typeof v === "string" && v.trim() !== "") {
+                        try {
+                          const created = await dispatch(
+                            createLabel({ name: v.trim() })
+                          ).unwrap();
+                          finalIds.push(String(created._id));
+                        } catch (err) {
+                          console.error(
+                            "Failed to create label from string:",
+                            err
+                          );
+                        }
+                      }
+                      // user picked "Create \"xyz\"" option
+                      else if (v && v.isNew && v.inputValue) {
+                        try {
+                          const created = await dispatch(
+                            createLabel({ name: v.inputValue.trim() })
+                          ).unwrap();
+                          finalIds.push(String(created._id));
+                        } catch (err) {
+                          console.error(
+                            "Failed to create label from option:",
+                            err
+                          );
+                        }
+                      }
+                      // existing label picked from dropdown
+                      else if (v && v._id) {
+                        finalIds.push(String(v._id));
+                      }
+                    }
+
+                    setForm((prev) => ({
+                      ...prev,
+                      labels: finalIds,
+                    }));
+                  }}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const labelText = option.displayName || option.name || "";
+                      return (
+                        <Chip
+                          {...getTagProps({ index })}
+                          key={option._id || labelText}
+                          label={labelText}
+                          size="small"
+                          sx={{
+                            borderRadius: 0.5,
+                            border: "1px solid #0052cc", // ✅ Colored border
+                            backgroundColor: "transparent", // ✅ No background
+                            color: "#172b4d", // Text color// Optional: Jira-like border
+                          }}
+                        />
+                      );
+                    })
+                  }
+                  renderOption={(props, option) => {
+                    // Header "All labels" – show only once at top
+                    if (option.isNew) {
+                      // "Create ..." row
+                      return (
+                        <li {...props}>
+                          <Chip
+                            label={option.name}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              borderRadius: 0.5,
+                              border: "1px solid #0052cc",
+                              backgroundColor: "transparent",
+                              color: "#172b4d",
+                            }}
+                          />
+                        </li>
+                      );
+                    }
+
+                    const labelText = option.displayName || option.name || "";
+                    return (
+                      <li {...props}>
+                        <Chip
+                          label={labelText}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            borderRadius: 0.5,
+                            border: "1px solid #0052cc",
+                            backgroundColor: "transparent",
+                            color: "#172b4d",
+                          }}
+                        />
+                      </li>
+                    );
+                  }}
+                  renderGroup={(params) => (
+                    <li key={params.key}>
+                      <ListSubheader
+                        disableSticky
+                        sx={{ fontSize: 12, lineHeight: 1.5, py: 0.5 }}
+                      >
+                        All labels
+                      </ListSubheader>
+                      <ul style={{ paddingLeft: 0, margin: 0 }}>
+                        {params.children}
+                      </ul>
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Labels"
+                      placeholder="Select or type to create"
                     />
-                  ))}
+                  )}
+                />
+              ) : form.labels && form.labels.length > 0 ? (
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {form.labels.map((labelId) => {
+                    const label = labels.find(
+                      (l) => String(l._id) === String(labelId)
+                    );
+                    const text = label?.displayName || label?.name || labelId;
+                    return (
+                      <Chip
+                        key={labelId}
+                        label={text}
+                        size="small"
+                        sx={{
+                        //   mb: 1,
+                          borderRadius: 0.8,
+                          border: "1.5px solid #0052cc", // ✅ Colored border
+                          backgroundColor: "transparent", // ✅ No background
+                          color: "#172b4d",
+                        }}
+                      />
+                    );
+                  })}
                 </Stack>
               ) : (
                 <Typography variant="body2" sx={{ opacity: 0.7 }}>
                   No labels.
                 </Typography>
               )}
+            </Box> */}
+
+            {/* Labels */}
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
+                {/* ✅ Left side: Label text */}
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    minWidth: 80,
+                    flexShrink: 0,
+                    pt: 0.5, // Slight padding to align with chips
+                  }}
+                >
+                  Labels
+                </Typography>
+
+                {/* ✅ Right side: Label chips */}
+                <Box sx={{ flex: 1 }}>
+                  {isEditing ? (
+                    <Autocomplete
+                      multiple
+                      freeSolo
+                      disableCloseOnSelect
+                      size="small"
+                      fullWidth
+                      options={labels}
+                      value={selectedLabelObjects}
+                      openOnFocus
+                      selectOnFocus
+                      handleHomeEndKeys
+                      isOptionEqualToValue={(option, value) =>
+                        String(option._id) === String(value._id)
+                      }
+                      getOptionLabel={(option) => {
+                        if (typeof option === "string") return option;
+                        if (option.inputValue) return option.inputValue;
+                        return option.displayName || option.name || "";
+                      }}
+                      filterOptions={(options, params) => {
+                        const filtered = filter(options, params);
+                        const { inputValue } = params;
+
+                        const isExisting = options.some((option) => {
+                          const text = (
+                            option.displayName ||
+                            option.name ||
+                            ""
+                          ).toLowerCase();
+                          return text === inputValue.toLowerCase();
+                        });
+
+                        if (inputValue !== "" && !isExisting) {
+                          filtered.push({
+                            inputValue,
+                            name: `Create "${inputValue}"`,
+                            isNew: true,
+                          });
+                        }
+
+                        return filtered;
+                      }}
+                      onChange={async (event, newValue) => {
+                        const finalIds = [];
+
+                        for (const v of newValue) {
+                          if (typeof v === "string" && v.trim() !== "") {
+                            try {
+                              const created = await dispatch(
+                                createLabel({ name: v.trim() })
+                              ).unwrap();
+                              finalIds.push(String(created._id));
+                            } catch (err) {
+                              console.error(
+                                "Failed to create label from string:",
+                                err
+                              );
+                            }
+                          } else if (v && v.isNew && v.inputValue) {
+                            try {
+                              const created = await dispatch(
+                                createLabel({ name: v.inputValue.trim() })
+                              ).unwrap();
+                              finalIds.push(String(created._id));
+                            } catch (err) {
+                              console.error(
+                                "Failed to create label from option:",
+                                err
+                              );
+                            }
+                          } else if (v && v._id) {
+                            finalIds.push(String(v._id));
+                          }
+                        }
+
+                        setForm((prev) => ({
+                          ...prev,
+                          labels: finalIds,
+                        }));
+                      }}
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => {
+                          const labelText =
+                            option.displayName || option.name || "";
+                          return (
+                            <Chip
+                              {...getTagProps({ index })}
+                              key={option._id || labelText}
+                              label={labelText}
+                              size="small"
+                              sx={{
+                                borderRadius: 0.5,
+                                border: "1px solid #0052cc",
+                                backgroundColor: "transparent",
+                                color: "#172b4d",
+                              }}
+                            />
+                          );
+                        })
+                      }
+                      renderOption={(props, option) => {
+                        if (option.isNew) {
+                          return (
+                            <li {...props}>
+                              <Chip
+                                label={option.name}
+                                size="small"
+                                variant="outlined"
+                                sx={{
+                                  borderRadius: 0.5,
+                                  border: "1px solid #0052cc",
+                                  backgroundColor: "transparent",
+                                  color: "#172b4d",
+                                }}
+                              />
+                            </li>
+                          );
+                        }
+
+                        const labelText =
+                          option.displayName || option.name || "";
+                        return (
+                          <li {...props}>
+                            <Chip
+                              label={labelText}
+                              size="small"
+                              variant="outlined"
+                              sx={{
+                                borderRadius: 0.5,
+                                border: "1px solid #0052cc",
+                                backgroundColor: "transparent",
+                                color: "#172b4d",
+                              }}
+                            />
+                          </li>
+                        );
+                      }}
+                      renderGroup={(params) => (
+                        <li key={params.key}>
+                          <ListSubheader
+                            disableSticky
+                            sx={{ fontSize: 12, lineHeight: 1.5, py: 0.5 }}
+                          >
+                            All labels
+                          </ListSubheader>
+                          <ul style={{ paddingLeft: 0, margin: 0 }}>
+                            {params.children}
+                          </ul>
+                        </li>
+                      )}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder="Select or type to create"
+                          size="small"
+                        />
+                      )}
+                    />
+                  ) : form.labels && form.labels.length > 0 ? (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      flexWrap="wrap"
+                      sx={{
+                        gap: 0.5,
+                        alignItems: "flex-start",
+                        "& > *": {
+                          margin: "0 !important", 
+                          marginLeft: "0 !important",
+                        },
+                      }}
+                    >
+                      {form.labels.map((labelId) => {
+                        const label = labels.find(
+                          (l) => String(l._id) === String(labelId)
+                        );
+                        const text =
+                          label?.displayName || label?.name || labelId;
+                        return (
+                          <Chip
+                            key={labelId}
+                            label={text}
+                            size="small"
+                            sx={{
+                              borderRadius: 0.5,
+                              border: "1.5px solid #0052cc",
+                              backgroundColor: "transparent",
+                              color: "#172b4d",
+                              fontSize: "13px",
+                              margin: 0,
+                            }}
+                          />
+                        );
+                      })}
+                    </Stack>
+                  ) : (
+                    <Typography
+                      variant="body2"
+                      sx={{ opacity: 0.7, fontSize: "13px" }}
+                    >
+                      None
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
             </Box>
 
             {/* System info */}

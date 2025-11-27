@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import cardRoutes from "./src/routes/cards.js";
 import boardRoutes from "./src/routes/boards.js";
 import columnRoutes from "./src/routes/columns.js";
+import labelRoutes from "./src/routes/label.js";
 dotenv.config();
 const app = express();
 
@@ -21,6 +22,7 @@ mongoose
 app.use("/api/columns", columnRoutes);
 app.use("/api/cards", cardRoutes);
 app.use("/api/boards", boardRoutes);
+app.use("/api/labels", labelRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

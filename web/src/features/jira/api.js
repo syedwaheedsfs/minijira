@@ -23,7 +23,7 @@ export const apiCreateCard = async (card) => {
 
 // src/features/jira/api.js
 export const apiFetchBoard = async (boardId) => {
-  const res = await fetch(`http://localhost:5000/api/boards/${boardId}`); // or http://localhost:5000/...
+  const res = await fetch(`http://localhost:5000/api/boards/${boardId}/data`); // or http://localhost:5000/...
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || "Failed to fetch board");
@@ -67,4 +67,13 @@ export async function apiUpdateCard(cardId, updates) {
     updates
   );
   return res.data;
+}
+
+//api to create albels
+export async function apiCreateLabel(labelData) {
+    const res = await axios.post(
+        `http://localhost:5000/api/labels`,
+        labelData
+    );
+    return res.data;
 }
