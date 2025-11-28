@@ -122,13 +122,36 @@ const boardSlice = createSlice({
     },
 
     /**
-     * Local move after drag & drop.
+     * Local move after drag & drop updates the columnid to new columnid.
      * Payload: { board } where board = { columns: [...] } from react-kanban
      */
     moveCardLocal(state, action) {
-      const { board } = action.payload || {};
-      if (!board || !Array.isArray(board.columns)) return;
-      state.columns = board.columns;
+       const { board } = action.payload || {};
+       if (!board || !Array.isArray(board.columns)) return;
+
+       console.log("=== BEFORE moveCardLocal ===");
+       console.log("Old columns:", JSON.parse(JSON.stringify(state.columns)));
+
+       // ✅ Update each card's columnId to match its current column
+       const updatedColumns = board.columns.map((column) => {
+         const columnId = column._id ?? column.id;
+
+         // Update columnId for each card in this column
+         const updatedCards = (column.cards || []).map((card) => ({
+           ...card,
+           columnId: columnId, // ✅ Ensure columnId matches the column it's in
+         }));
+
+         return {
+           ...column,
+           cards: updatedCards,
+         };
+       });
+
+       console.log("=== AFTER moveCardLocal ===");
+       console.log("New columns:", JSON.parse(JSON.stringify(updatedColumns)));
+
+       state.columns = updatedColumns;
     },
   },
   extraReducers: (builder) => {
