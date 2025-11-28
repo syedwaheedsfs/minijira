@@ -16,7 +16,17 @@ const JiraCard = ({ title, priority, id, ticketType, assigneeId, onClick }) => {
 
   return (
     <Card onClick={onClick} sx={{ cursor: "pointer" }}>
-      <CardContent style={{ width: 300 }}>
+      <CardContent
+        
+        sx={{
+          width: 179,
+          height: 120,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          p: 1.5,
+        }}
+      >
         <Typography variant="body2">{title}</Typography>
 
         <Box sx={{ display: "flex", marginTop: "20px" }}>

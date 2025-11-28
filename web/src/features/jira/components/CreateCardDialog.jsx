@@ -14,10 +14,15 @@ import {
   CircularProgress,
   Box,
   Alert,
+  Chip,
 } from "@mui/material";
+
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete"; // 👈 added
+import ListSubheader from "@mui/material/ListSubheader"; // optional, used like in CardDetailsDialog
+
 import { useForm, Controller } from "react-hook-form";
-import { useDispatch } from "react-redux";
-import { createCard } from "../../boardSlice"; // adjust path if needed
+import { useDispatch, useSelector } from "react-redux"; // 👈 updated
+import { createCard, createLabel } from "../../boardSlice"; // 👈 bring createLabel too
 
 const defaultValues = {
   boardId: "",
@@ -29,8 +34,10 @@ const defaultValues = {
   ticketType: "",
   actualTimeToComplete: "",
   priority: "",
-  labels: [],
+  labels: [], // 👈 array of label IDs (strings)
 };
+
+const filter = createFilterOptions(); // 👈 same as CardDetailsDialog
 
 export default function CreateCardDialog({ open, onClose, boardId, columns }) {
   const dispatch = useDispatch();
@@ -45,22 +52,22 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
 
   const [submitError, setSubmitError] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const LABEL_OPTIONS = ["frontend", "backend", "api", "ui", "bug", "infra"];
+
+  // 👇 Get label objects from Redux (same source as CardDetailsDialog)
+  const labels = useSelector((state) => state.board.labels || []);
 
   // keep boardId in sync when prop changes
   React.useEffect(() => {
     if (boardId) setValue("boardId", boardId);
   }, [boardId, setValue]);
 
-  // When dialog opens, preselect first column (if exists) and reset form
+  // When dialog opens, reset form
   React.useEffect(() => {
-    // const firstColumnId =
-    //   columns && columns.length > 0 ? columns[0]._id ?? columns[0].id : "";
     if (open) {
       reset({
         ...defaultValues,
         boardId: boardId || "",
-        columnId:  "",
+        columnId: "",
       });
       setSubmitError(null);
     } else {
@@ -80,24 +87,21 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
       return;
     }
 
-    // ensure storyPoints is a number or null
     const payload = {
       ...data,
       actualTimeToComplete:
         data.actualTimeToComplete === "" || data.actualTimeToComplete == null
           ? 0
           : Number(data.actualTimeToComplete),
+      // data.labels is already an array of ObjectId strings (like CardDetailsDialog)
     };
 
     try {
       setIsSubmitting(true);
-      // dispatch thunk and unwrap to throw on rejection
       const created = await dispatch(createCard(payload)).unwrap();
-      // success: reset and close
       reset({ ...defaultValues, boardId: boardId || "" });
       onClose?.();
     } catch (err) {
-      // show readable error
       const message =
         (err && err.message) ||
         (typeof err === "string" && err) ||
@@ -140,7 +144,7 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
                 <Select {...field} label="Status" value={field.value || ""}>
                   {columns?.map((col) => (
                     <MenuItem key={col._id ?? col.id} value={col._id ?? col.id}>
-                      {col.title}
+                      {col.title.toLowerCase()}
                     </MenuItem>
                   ))}
                 </Select>
@@ -234,6 +238,7 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
             )}
           />
 
+          {/* ACTUAL TIME */}
           <Controller
             name="actualTimeToComplete"
             control={control}
@@ -244,12 +249,12 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
                 fullWidth
                 type="number"
                 margin="normal"
-                inputProps={{ min: 0, step: 0.25 }} // e.g. 0.25 increments
+                inputProps={{ min: 0, step: 0.25 }}
               />
             )}
           />
 
-          {/*  Priority */}
+          {/* Priority */}
           <FormControl fullWidth margin="normal">
             <InputLabel>Priority</InputLabel>
             <Controller
@@ -257,11 +262,7 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
               control={control}
               defaultValue=""
               render={({ field }) => (
-                <Select
-                  {...field}
-                  label="Priority"
-                  value={field.value || ""}
-                >
+                <Select {...field} label="Priority" value={field.value || ""}>
                   <MenuItem value="low">Low</MenuItem>
                   <MenuItem value="medium">Medium</MenuItem>
                   <MenuItem value="high">High</MenuItem>
@@ -271,31 +272,134 @@ export default function CreateCardDialog({ open, onClose, boardId, columns }) {
             />
           </FormControl>
 
-          {/* Labels */}
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Labels</InputLabel>
-            <Controller
-              name="labels"
-              control={control}
-              defaultValue={[]}
-              render={({ field }) => (
-                <Select
-                  {...field}
-                  label="Labels"
+          {/* Labels (ObjectId-based, like CardDetailsDialog) */}
+          <Controller
+            name="labels"
+            control={control}
+            defaultValue={[]}
+            render={({ field }) => {
+              // field.value is array of label IDs -> convert to label objects for Autocomplete
+              const selectedLabelObjects = Array.isArray(field.value)
+                ? field.value
+                    .map((id) =>
+                      labels.find((l) => String(l._id) === String(id))
+                    )
+                    .filter(Boolean)
+                : [];
+
+              return (
+                <Autocomplete
                   multiple
-                  value={field.value || []}
-                  onChange={(event) => field.onChange(event.target.value)}
-                  renderValue={(selected) => (selected || []).join(", ")}
-                >
-                  {LABEL_OPTIONS.map((label) => (
-                    <MenuItem key={label} value={label}>
-                      {label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              )}
-            />
-          </FormControl>
+                  freeSolo
+                  disableCloseOnSelect
+                  size="small"
+                  fullWidth
+                  options={labels}
+                  value={selectedLabelObjects}
+                  openOnFocus
+                  selectOnFocus
+                  handleHomeEndKeys
+                  isOptionEqualToValue={(option, value) =>
+                    String(option._id) === String(value._id)
+                  }
+                  getOptionLabel={(option) => {
+                    if (typeof option === "string") return option;
+                    if (option.inputValue) return option.inputValue;
+                    return option.displayName || option.name || "";
+                  }}
+                  filterOptions={(options, params) => {
+                    const filtered = filter(options, params);
+                    const { inputValue } = params;
+
+                    const isExisting = options.some((option) => {
+                      const text = (
+                        option.displayName ||
+                        option.name ||
+                        ""
+                      ).toLowerCase();
+                      return text === inputValue.toLowerCase();
+                    });
+
+                    if (inputValue !== "" && !isExisting) {
+                      filtered.push({
+                        inputValue,
+                        name: `Create "${inputValue}"`,
+                        isNew: true,
+                      });
+                    }
+
+                    return filtered;
+                  }}
+                  onChange={async (event, newValue) => {
+                    const finalIds = [];
+
+                    for (const v of newValue) {
+                      if (typeof v === "string" && v.trim() !== "") {
+                        // User typed a raw string -> create label
+                        try {
+                          const created = await dispatch(
+                            createLabel({ name: v.trim() })
+                          ).unwrap();
+                          finalIds.push(String(created._id));
+                        } catch (err) {
+                          console.error(
+                            "Failed to create label from string:",
+                            err
+                          );
+                        }
+                      } else if (v && v.isNew && v.inputValue) {
+                        // The "Create "X"" option
+                        try {
+                          const created = await dispatch(
+                            createLabel({ name: v.inputValue.trim() })
+                          ).unwrap();
+                          finalIds.push(String(created._id));
+                        } catch (err) {
+                          console.error(
+                            "Failed to create label from option:",
+                            err
+                          );
+                        }
+                      } else if (v && v._id) {
+                        // Existing label
+                        finalIds.push(String(v._id));
+                      }
+                    }
+
+                    // Store only ObjectId strings in form state
+                    field.onChange(finalIds);
+                  }}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const labelText = option.displayName || option.name || "";
+                      return (
+                        <Chip
+                          {...getTagProps({ index })}
+                          key={option._id || labelText}
+                          label={labelText}
+                          size="small"
+                          sx={{
+                            borderRadius: 0.5,
+                            border: "1px solid #0052cc",
+                            backgroundColor: "transparent",
+                            color: "#172b4d",
+                          }}
+                        />
+                      );
+                    })
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Labels"
+                      margin="normal"
+                      placeholder="Select or type to create"
+                    />
+                  )}
+                />
+              );
+            }}
+          />
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2 }}>
